@@ -158,15 +158,20 @@ pub fn get_auth_token(git_config: &git2::Config) -> Option<String> {
 }
 
 pub fn get_auth_token_with_source(git_config: &git2::Config) -> Option<AuthTokenSource> {
+    get_auth_token_with_source_for_host(git_config, "github.com")
+}
+
+pub fn get_auth_token_with_source_for_host(git_config: &git2::Config, github_host: &str) -> Option<AuthTokenSource> {
     // Prefer the configured token if it exists
     if let Some(token) = get_config_value("spr.githubAuthToken", git_config) {
         return Some(AuthTokenSource::Config(token));
     }
 
-    // Try to get a token from the gh CLI
+    // Try to get a token from the gh CLI for the specific host
     let output = std::process::Command::new("gh")
-        .args(["auth", "token"])
+        .args(["auth", "token", "--hostname", github_host])
         .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
         .output()
         .ok()?;
 

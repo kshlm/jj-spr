@@ -10,7 +10,7 @@ use lazy_regex::regex;
 use regex::Regex;
 
 use crate::{
-    config::{AuthTokenSource, get_auth_token_with_source},
+    config::AuthTokenSource,
     error::{Error, Result, ResultExt},
     output::output,
 };
@@ -70,7 +70,7 @@ pub async fn init() -> Result<()> {
         "Okay, let's get started. First we need to authenticate to GitHub.",
     )?;
 
-    let github_auth_token = get_auth_token_with_source(&config).and_then(|value| {
+    let github_auth_token = crate::config::get_auth_token_with_source_for_host(&config, &github_host).and_then(|value| {
         if value.token().is_empty() {
             None
         } else {
