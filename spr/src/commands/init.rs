@@ -7,6 +7,7 @@
 
 use indoc::formatdoc;
 use lazy_regex::regex;
+use regex::Regex;
 
 use crate::{
     config::{AuthTokenSource, get_auth_token_with_source},
@@ -24,6 +25,41 @@ pub async fn init() -> Result<()> {
         path
     ))?;
     let mut config = repo.config()?;
+
+    // GitHub Host (github.com or Enterprise)
+
+    console::Term::stdout().write_line("")?;
+
+    output(
+        "❓",
+        &formatdoc!(
+            "Are you using GitHub.com or GitHub Enterprise?"
+        ),
+    )?;
+
+    let is_enterprise = dialoguer::Confirm::new()
+        .with_prompt("Using GitHub Enterprise?")
+        .default(false)
+        .interact()?;
+
+    let github_host = if is_enterprise {
+        output(
+            "  ",
+            &formatdoc!(
+                "Please enter the hostname of your GitHub Enterprise instance. \
+                 For example: 'github.company.com' or 'github.internal.mycompany.com'"
+            ),
+        )?;
+
+        let host = dialoguer::Input::<String>::new()
+            .with_prompt("GitHub Enterprise hostname")
+            .interact_text()?;
+        host
+    } else {
+        "github.com".to_string()
+    };
+
+    config.set_str("spr.githubHost", &github_host)?;
 
     // GitHub Personal Access Token
 
@@ -54,6 +90,8 @@ pub async fn init() -> Result<()> {
             .interact()?,
     };
 
+    let token_url = format!("https://{}/settings/tokens", github_host);
+
     let pat = if reuse_token {
         github_auth_token.unwrap().token().to_owned()
     } else {
@@ -63,14 +101,15 @@ pub async fn init() -> Result<()> {
                 "We need a 'Personal Access Token' from GitHub. This will \
              authorise spr to open/update/merge Pull Requests etc. on behalf of \
              your GitHub user.
-             You can get one by going to https://github.com/settings/tokens \
+             You can get one by going to {token_url} \
              and clicking on 'Generate new token'. The token needs the 'repo', \
              'user' and 'read:org' permissions, so please tick those three boxes \
              in the 'Select scopes' section.
              You might want to set the 'Expiration' to 'No expiration', as \
              otherwise you will have to repeat this procedure soon. Even \
              if the token does not expire, you can always revoke it in case \
-             you fear someone got hold of it."
+             you fear someone got hold of it.",
+                token_url = token_url
             ),
         )?;
 
@@ -85,9 +124,15 @@ pub async fn init() -> Result<()> {
         pat
     };
 
-    let octocrab = octocrab::OctocrabBuilder::new()
-        .personal_token(pat.clone())
-        .build()?;
+    let mut octocrab_builder = octocrab::OctocrabBuilder::new()
+        .personal_token(pat.clone());
+    
+    if github_host != "github.com" {
+        let api_url = crate::config::Config::build_api_url(&github_host);
+        octocrab_builder = octocrab_builder.base_url(api_url)?;
+    }
+    
+    let octocrab = octocrab_builder.build()?;
     let github_user = octocrab.current().user().await?;
 
     output("👋", &formatdoc!("Hello {}!", github_user.login))?;
@@ -128,19 +173,22 @@ pub async fn init() -> Result<()> {
         &formatdoc!(
             "What's the name of the GitHub repository. Please enter \
              'OWNER/REPOSITORY' (basically the bit that follow \
-             'github.com/' in the address.)"
+             '{host}/' in the address.)",
+            host = &github_host
         ),
     )?;
 
     let url = repo.find_remote(&remote)?.url().map(String::from);
-    let regex = lazy_regex::regex!(r#"github\.com[/:]([\w\-\.]+/[\w\-\.]+?)(.git)?$"#);
+    let escaped_host = regex::escape(&github_host);
+    let pattern = format!(r#"{}[/:]([\w\-\.]+/[\w\-\.]+?)(.git)?$"#, escaped_host);
+    let regex = Regex::new(&pattern).ok();
     let github_repo = config
         .get_string("spr.githubRepository")
         .ok()
         .and_then(|value| if value.is_empty() { None } else { Some(value) })
         .or_else(|| {
             url.as_ref()
-                .and_then(|url| regex.captures(url))
+                .and_then(|url| regex.as_ref().and_then(|r| r.captures(url)))
                 .and_then(|caps| caps.get(1))
                 .map(|m| m.as_str().to_string())
         })

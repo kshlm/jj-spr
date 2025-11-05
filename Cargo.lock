@@ -837,6 +837,7 @@ dependencies = [
  "indoc",
  "lazy-regex",
  "octocrab",
+ "regex",
  "reqwest",
  "serde",
  "tempfile",

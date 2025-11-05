@@ -140,6 +140,8 @@ pub async fn spr() -> Result<()> {
         .unwrap_or_else(|| "origin".to_string());
     let github_master_branch = get_config_value("spr.githubMasterBranch", &git_config)
         .unwrap_or_else(|| "main".to_string());
+    let github_host = get_config_value("spr.githubHost", &git_config)
+        .unwrap_or_else(|| "github.com".to_string());
     let branch_prefix = get_config_value("spr.branchPrefix", &git_config)
         .ok_or_else(|| Error::new("spr.branchPrefix must be configured".to_string()))?;
     let require_approval = get_config_bool("spr.requireApproval", &git_config).unwrap_or(false);
@@ -153,6 +155,7 @@ pub async fn spr() -> Result<()> {
         branch_prefix,
         require_approval,
         require_test_plan,
+        github_host.clone(),
     );
 
     let jj = jj_spr::jj::Jujutsu::new(repo)
@@ -168,7 +171,14 @@ pub async fn spr() -> Result<()> {
             .ok_or_else(|| Error::new("GitHub auth token must be configured".to_string()))?,
     };
 
-    octocrab::initialise(octocrab::Octocrab::builder().personal_token(github_auth_token.clone()))?;
+    let mut octocrab_builder = octocrab::Octocrab::builder().personal_token(github_auth_token.clone());
+    
+    if github_host != "github.com" {
+        let api_url = jj_spr::config::Config::build_api_url(&github_host);
+        octocrab_builder = octocrab_builder.base_url(api_url)?;
+    }
+    
+    octocrab::initialise(octocrab_builder)?;
 
     let mut headers = header::HeaderMap::new();
     headers.insert(header::ACCEPT, "application/json".parse()?);

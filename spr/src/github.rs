@@ -157,8 +157,9 @@ impl GitHub {
             number: number as i64,
         };
         let request_body = PullRequestQuery::build_query(variables);
+        let graphql_url = format!("{}/graphql", config.github_api_url);
         let res = graphql_client
-            .post("https://api.github.com/graphql")
+            .post(&graphql_url)
             .json(&request_body)
             .send()
             .await?;
@@ -413,9 +414,10 @@ impl GitHub {
             number: number as i64,
         };
         let request_body = PullRequestMergeabilityQuery::build_query(variables);
+        let graphql_url = format!("{}/graphql", self.config.github_api_url);
         let res = self
             .graphql_client
-            .post("https://api.github.com/graphql")
+            .post(&graphql_url)
             .json(&request_body)
             .send()
             .await?;

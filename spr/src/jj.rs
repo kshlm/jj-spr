@@ -366,6 +366,7 @@ mod tests {
             "spr/test/".into(),
             false,
             false,
+            "github.com".into(),
         )
     }
 
