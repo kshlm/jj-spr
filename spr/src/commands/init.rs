@@ -127,13 +127,70 @@ pub async fn init() -> Result<()> {
     let mut octocrab_builder = octocrab::OctocrabBuilder::new()
         .personal_token(pat.clone());
     
-    if github_host != "github.com" {
+    let api_url = if github_host != "github.com" {
         let api_url = crate::config::Config::build_api_url(&github_host);
-        octocrab_builder = octocrab_builder.base_url(api_url)?;
+        octocrab_builder = octocrab_builder.base_url(api_url.clone())?;
+        api_url
+    } else {
+        crate::config::Config::build_api_url(&github_host)
+    };
+    
+    output(
+        "  ",
+        &formatdoc!("Using GitHub API URL: {}", api_url),
+    )?;
+    
+    // Validate authentication by fetching the current user
+    // We do this with a manual request so we can show the actual response if it fails
+    let client = reqwest::Client::new();
+    let user_url = format!("{}/user", api_url);
+    let response = client
+        .get(&user_url)
+        .header("Authorization", format!("token {}", pat))
+        .header("User-Agent", "jj-spr")
+        .send()
+        .await
+        .reword(formatdoc!(
+            "Failed to connect to GitHub API at '{}'.
+             Please verify:
+             - The GitHub host '{}' is correct and accessible
+             - Your network can reach this endpoint",
+            user_url,
+            github_host
+        ))?;
+    
+    let status = response.status();
+    let response_text = response.text().await?;
+    
+    if !status.is_success() {
+        return Err(Error::new(formatdoc!(
+            "GitHub API request failed with status {}.
+             
+             Response from {}:
+             {}",
+            status,
+            user_url,
+            response_text
+        )));
     }
     
+    let github_user: octocrab::models::User = serde_json::from_str(&response_text)
+        .reword(formatdoc!(
+            "Failed to parse GitHub API response as JSON.
+             
+             This suggests the GitHub host or API URL is incorrect.
+             Expected JSON response from '{}/user' but got:
+             
+             {}",
+            api_url,
+            if response_text.len() > 500 {
+                format!("{}... (truncated, {} bytes total)", &response_text[..500], response_text.len())
+            } else {
+                response_text.clone()
+            }
+        ))?;
+    
     let octocrab = octocrab_builder.build()?;
-    let github_user = octocrab.current().user().await?;
 
     output("👋", &formatdoc!("Hello {}!", github_user.login))?;
 
@@ -204,7 +261,15 @@ pub async fn init() -> Result<()> {
 
     let github_repo_info = octocrab
         .get::<octocrab::models::Repository, _, _>(format!("repos/{}", &github_repo), None::<&()>)
-        .await?;
+        .await
+        .reword(formatdoc!(
+            "Failed to fetch repository information for '{}'.
+             Please verify:
+             - The repository name is correct (should be 'OWNER/REPO')
+             - You have access to this repository
+             - The Personal Access Token has the required permissions",
+            github_repo
+        ))?;
 
     config.set_str(
         "spr.githubMasterBranch",
