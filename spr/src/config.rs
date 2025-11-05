@@ -352,4 +352,95 @@ mod tests {
             Some(456)
         );
     }
+
+    #[test]
+    fn test_parse_pull_request_field_rejects_wrong_host() {
+        let gh = config_factory_enterprise();
+
+        assert_eq!(
+            gh.parse_pull_request_field("https://github.com/acme/codez/pull/123"),
+            None,
+            "Should reject github.com URL when configured for enterprise"
+        );
+    }
+
+    #[test]
+    fn test_parse_pull_request_field_rejects_wrong_owner() {
+        let gh = config_factory_enterprise();
+
+        assert_eq!(
+            gh.parse_pull_request_field("https://github.company.com/different/codez/pull/123"),
+            None,
+            "Should reject PR from different owner"
+        );
+    }
+
+    #[test]
+    fn test_parse_pull_request_field_rejects_wrong_repo() {
+        let gh = config_factory_enterprise();
+
+        assert_eq!(
+            gh.parse_pull_request_field("https://github.company.com/acme/different/pull/123"),
+            None,
+            "Should reject PR from different repo"
+        );
+    }
+
+    #[test]
+    fn test_parse_pull_request_field_enterprise_with_subdomain() {
+        let gh = crate::config::Config::new(
+            "owner".into(),
+            "repo".into(),
+            "origin".into(),
+            "main".into(),
+            "spr/test/".into(),
+            false,
+            false,
+            "github.internal.company.com".into(),
+        );
+
+        assert_eq!(
+            gh.parse_pull_request_field("https://github.internal.company.com/owner/repo/pull/789"),
+            Some(789),
+            "Should handle subdomains in GitHub Enterprise host"
+        );
+    }
+
+    #[test]
+    fn test_build_api_url_with_subdomains() {
+        assert_eq!(
+            Config::build_api_url("github.internal.company.com"),
+            "https://github.internal.company.com/api/v3"
+        );
+    }
+
+    #[test]
+    fn test_pull_request_url_github_com() {
+        let gh = config_factory();
+        assert_eq!(
+            &gh.pull_request_url(456),
+            "https://github.com/acme/codez/pull/456"
+        );
+    }
+
+    #[test]
+    fn test_github_host_field_is_set() {
+        let gh = config_factory();
+        assert_eq!(gh.github_host, "github.com");
+
+        let gh_enterprise = config_factory_enterprise();
+        assert_eq!(gh_enterprise.github_host, "github.company.com");
+    }
+
+    #[test]
+    fn test_github_api_url_field_is_set() {
+        let gh = config_factory();
+        assert_eq!(gh.github_api_url, "https://api.github.com");
+
+        let gh_enterprise = config_factory_enterprise();
+        assert_eq!(
+            gh_enterprise.github_api_url,
+            "https://github.company.com/api/v3"
+        );
+    }
 }

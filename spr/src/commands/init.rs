@@ -297,6 +297,39 @@ fn validate_branch_prefix(branch_prefix: &str) -> Result<()> {
 mod tests {
     use super::validate_branch_prefix;
 
+    mod github_enterprise_tests {
+        use crate::config::Config;
+
+        #[test]
+        fn test_build_api_url_github_com() {
+            assert_eq!(Config::build_api_url("github.com"), "https://api.github.com");
+        }
+
+        #[test]
+        fn test_build_api_url_enterprise() {
+            assert_eq!(
+                Config::build_api_url("github.company.com"),
+                "https://github.company.com/api/v3"
+            );
+        }
+
+        #[test]
+        fn test_build_api_url_enterprise_with_port() {
+            assert_eq!(
+                Config::build_api_url("github.company.com:8080"),
+                "https://github.company.com:8080/api/v3"
+            );
+        }
+
+        #[test]
+        fn test_build_api_url_with_deep_subdomain() {
+            assert_eq!(
+                Config::build_api_url("github.internal.dev.company.com"),
+                "https://github.internal.dev.company.com/api/v3"
+            );
+        }
+    }
+
     #[test]
     fn test_branch_prefix_rules() {
         // Rules taken from https://git-scm.com/docs/git-check-ref-format

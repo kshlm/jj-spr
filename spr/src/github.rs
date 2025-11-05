@@ -606,4 +606,74 @@ mod tests {
         assert_eq!(r.branch_name(), "refs/heads/foo");
         assert!(!r.is_master_branch());
     }
+
+    mod enterprise_tests {
+        use super::*;
+
+        fn create_github_config(github_host: &str) -> GitHub {
+            let config = crate::config::Config::new(
+                "test_owner".into(),
+                "test_repo".into(),
+                "origin".into(),
+                "main".into(),
+                "spr/test/".into(),
+                false,
+                false,
+                github_host.into(),
+            );
+            let graphql_client = reqwest::Client::new();
+            GitHub::new(config, graphql_client)
+        }
+
+        #[test]
+        fn test_github_api_url_for_github_com() {
+            let gh = create_github_config("github.com");
+            assert_eq!(gh.config.github_api_url, "https://api.github.com");
+        }
+
+        #[test]
+        fn test_github_api_url_for_enterprise() {
+            let gh = create_github_config("github.company.com");
+            assert_eq!(
+                gh.config.github_api_url,
+                "https://github.company.com/api/v3"
+            );
+        }
+
+        #[test]
+        fn test_github_api_url_for_enterprise_with_subdomain() {
+            let gh = create_github_config("github.internal.company.com");
+            assert_eq!(
+                gh.config.github_api_url,
+                "https://github.internal.company.com/api/v3"
+            );
+        }
+
+        #[test]
+        fn test_config_github_host_field() {
+            let gh_com = create_github_config("github.com");
+            assert_eq!(gh_com.config.github_host, "github.com");
+
+            let gh_enterprise = create_github_config("github.enterprise.com");
+            assert_eq!(gh_enterprise.config.github_host, "github.enterprise.com");
+        }
+
+        #[test]
+        fn test_pull_request_url_github_com() {
+            let gh = create_github_config("github.com");
+            assert_eq!(
+                gh.config.pull_request_url(123),
+                "https://github.com/test_owner/test_repo/pull/123"
+            );
+        }
+
+        #[test]
+        fn test_pull_request_url_enterprise() {
+            let gh = create_github_config("github.company.com");
+            assert_eq!(
+                gh.config.pull_request_url(456),
+                "https://github.company.com/test_owner/test_repo/pull/456"
+            );
+        }
+    }
 }
